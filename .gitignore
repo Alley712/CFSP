@@ -1,0 +1,8 @@
+/.venv/
+/.idea/
+/data/raw_zips/*
+/downloads/*
+/models/
+__pycache__/
+*.pyc
+.DS_Store

@@ -3,6 +3,7 @@
 import torch
 import codecs
 import json
+import os
 from functools import partial
 import numpy as np
 import torch.nn.functional as F
@@ -127,6 +128,7 @@ def test(model, val_loader):
 
             pass
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
+    os.makedirs('dataset', exist_ok=True)
     with open('dataset/A_task3_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 
@@ -139,7 +141,7 @@ if __name__ == '__main__':
 
     test_dataset = Dataset("../data/cfn-dataset/cfn-test-A.json",
                             "../data/cfn-dataset/frame_info.json",
-                            "../data/cfn-dataset/A_task2_test.json",
+                            "dataset/A_task2_test.json",
                             tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)

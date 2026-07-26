@@ -3,6 +3,7 @@
 import torch
 import codecs
 import json
+import os
 from functools import partial
 import numpy as np
 from torch.utils.data import DataLoader
@@ -117,6 +118,7 @@ def test(model, val_loader):
                 predicts += idx
             pass
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
+    os.makedirs('dataset', exist_ok=True)
     with open('dataset/A_task2_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 

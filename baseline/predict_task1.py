@@ -2,6 +2,7 @@
 
 import codecs
 import json
+import os
 from functools import partial
 import numpy as np
 import torch
@@ -95,6 +96,7 @@ def test(model, test_loader):
                 all_dataset.append([sentence_id[i], idx2label[pred[i]]])
 
     data_json = json.dumps(all_dataset, indent=1, ensure_ascii=False)
+    os.makedirs('dataset', exist_ok=True)
     with open('dataset/A_task1_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 

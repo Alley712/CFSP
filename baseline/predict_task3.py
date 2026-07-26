@@ -137,9 +137,9 @@ if __name__ == '__main__':
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
 
-    test_dataset = Dataset("../data/cfn-dataset/cfn-test-B.json",
+    test_dataset = Dataset("../data/cfn-dataset/cfn-test-A.json",
                             "../data/cfn-dataset/frame_info.json",
-                            "../data/cfn-dataset/B_task2_test.json",
+                            "../data/cfn-dataset/A_task2_test.json",
                             tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)

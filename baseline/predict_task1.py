@@ -105,7 +105,7 @@ if __name__ == '__main__':
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
 
-    test_dataset = Dataset("../data/cfn-dataset/cfn-test-B.json",
+    test_dataset = Dataset("../data/cfn-dataset/cfn-test-A.json",
                             "../data/cfn-dataset/frame_info.json",
                             tokenizer)
 

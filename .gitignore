@@ -6,3 +6,6 @@
 __pycache__/
 *.pyc
 .DS_Store
+.ipynb_checkpoints/
+baseline/saves/
+baseline/submit.zip

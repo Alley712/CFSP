@@ -262,7 +262,7 @@ if __name__ == '__main__':
     msg = model.load_state_dict(state, strict=False)
     # model.load_state_dict(torch.load('', map_location='cpu'))
     model = model.to(device)
-    args.num_train_epochs = 5
+    args.num_train_epochs = 20
     train_loader = DataLoader(
         batch_size=args.batch_size,
         dataset=train_dataset,

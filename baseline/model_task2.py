@@ -77,11 +77,7 @@ class Model(nn.Module):
     def compute_loss(self, logits, labels, attention_mask):
         H_attention_mask = torch.triu(
             torch.matmul(attention_mask.unsqueeze(2).float(), attention_mask.unsqueeze(1).float()), diagonal=0)
-        # 正负样本极度不平衡（~1:2000），用BCE+pos_weight替代原始GlobalPointer loss
-        num_pos = labels.sum() + 1e-9
-        num_neg = H_attention_mask.sum() - num_pos + 1e-9
-        pos_weight = torch.clamp(num_neg / num_pos, max=50.0).detach()
-        bce = torch.nn.functional.binary_cross_entropy_with_logits(
-            logits, labels, reduction='none', pos_weight=pos_weight)
-        loss = (bce * H_attention_mask).sum() / H_attention_mask.sum()
+        loss1 = torch.sum(torch.exp(-logits) * H_attention_mask * labels, dim=(1, 2))
+        loss2 = torch.sum(torch.exp(logits) * H_attention_mask * (1 - labels), dim=(1, 2))
+        loss = torch.sum(torch.log(1 + loss1 + 1e-9) + torch.log(1 + loss2 + 1e-9)) / (H_attention_mask.shape[0])
         return loss

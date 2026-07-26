@@ -239,3 +239,102 @@ epoch 2 达到最佳 F1=**0.086**（P=4.8%, R=46.8%），epoch 3-5 稳定不再�
 - 损失函数重构为 BCEWithLogitsLoss + 去除 NoisyTune 让 F1 从 0.037 → **0.086**（+132%）
 - 模型仍在学习（正负分布有效分离），瓶颈在于极端不平衡 + 固定阈值
 - 后续方向：搜索最佳阈值、增加训练 epoch、或引入更强特征编码
+
+---
+
+## 最终方案：回归原始 GlobalPointer loss + 去 NoisyTune + 20 epoch
+
+### 日期
+
+2026-07-26
+
+### 发现
+
+在原始 baseline 环境（`The-3nd-Chinese-Frame-Semantic-Parsing-main.zip`）中，不做任何代码修改直接运行 Task 2，在当前 PyTorch 2.7.1 + transformers 4.36 环境下 F1 仅 **0.0017**。
+
+这说明之前所有调试中遇到的低 F1 问题**并非我们兼容性修复引入的回归**，而是 PyTorch 大版本升级（1.13 → 2.7）导致的数值行为变化。
+
+### 最优配置
+
+| 选项 | 值 |
+|---|---|
+| Loss | 原始 GlobalPointer `log(1+sum)` |
+| NoisyTune | **关** |
+| FGM | 调用但无实际效果（中间 forward pass 已注释） |
+| Epochs | **20** |
+| Batch size | 8 |
+| Learning rate | 2e-5 |
+| 阈值 | 0 |
+
+### 训练曲线
+
+| Epoch | Best F1 | Precision | Recall |
+|---|---|---|---|
+| 1 | 0.000 | 0% | 0% |
+| 2 | 0.020 | 26.8% | 1.0% |
+| 3 | 0.156 | 33.4% | 10.2% |
+| 4 | 0.209 | 47.7% | 13.4% |
+| 5 | 0.286 | 46.3% | 20.7% |
+| 6 | 0.358 | 42.3% | 31.1% |
+| 7 | 0.373 | 46.0% | 31.3% |
+| 8 | 0.381 | 48.9% | 31.2% |
+| **10** | **0.393** | **51.0%** | **32.0%** |
+| 11-20 | 0.393 | plateau | plateau |
+
+### 与原始代码对比
+
+| 配置 | F1 | 说明 |
+|---|---|---|
+| 原始代码（不改，5 epoch） | 0.002 | NoisyTune ON, FGM ON |
+| Phase 2 初版（5 epoch） | 0.037 | NoisyTune ON, FGM 无效 |
+| **最优（20 epoch）** | **0.393** | NoisyTune OFF |
+
+### 官方 Baseline 差异
+
+官方 baseline 的 F1 为 0.83，推断是在 PyTorch 1.13 + transformers 4.24 原生环境下达到的。PyTorch 2.x 的 AdamW 实现、BERT 内部精度、attention 默认行为等变化导致了不可忽视的数值差异。
+
+---
+
+## 首次打榜结果
+
+### 日期
+
+2026-07-26 23:12
+
+### 成绩
+
+| 指标 | 分数 |
+|---|---|
+| **总 Score** | **37.3921** |
+| Task1 Accuracy | 62.0833 |
+| Task2 F1 | 42.6303 |
+| Task2 Precision | 70.9336 |
+| Task2 Recall | 30.4717 |
+| Task3 F1 | 14.9450 |
+| Task3 Precision | 19.8332 |
+| Task3 Recall | 11.9899 |
+
+### 与 Baseline 对比
+
+官方 Baseline（PyTorch 1.13 + transformers 4.24）：
+
+| 指标 | Baseline | Ours | 差值 | 比例 |
+|---|---|---|---|---|
+| Task1 Acc | **70.83** | 62.08 | -8.75 | 87.6% |
+| Task2 F1 | **83.06** | 42.63 | -40.43 | 51.3% |
+| Task3 F1 | **57.08** | 14.95 | -42.13 | 26.2% |
+| **总 Score** | **69.00** | **37.39** | **-31.61** | **54.2%** |
+
+### 差距分析
+
+**Task1（框架识别，87.6%）**：差距最小。NoisyTune 在 Task 1 模型中也开启了，但因为 Task1 是分类任务（精度 62%）而非 span 预测，NoisyTune 的噪声对分类影响相对较小。主要差距可能来自 epoch 数（10 vs 5）。
+
+**Task2（论元边界，51.3%）**：主要瓶颈。我们在 dev 集只能到 0.393，测试集反而到了 42.63。但与 Baseline 83.06 仍有巨大差距。PyTorch 版本升级导致的数值变化是根本原因——原始代码在当前环境下也只能跑到 0.002（见上文）。
+
+**Task3（论元角色，26.2%）**：差距最大。Task3 串联依赖 Task2 的边界预测结果（A_task2_test.json），Task2 差 → Task3 输入质量差 → Task3 更差，形成误差传播。即使角色分类本身正确，边界错了也算全错。
+
+### 启示
+
+- 要在当前环境追平 Baseline，可能需要**降级 PyTorch 到 1.13 + transformers 4.24**
+- 或者在当前环境从零调参（lr schedule、warmup、更多 epoch、数据增强）
+- Task3 的提升很大程度取决于 Task2 的改善

@@ -138,3 +138,104 @@ for d in data:
 
 - 全量 10700 条训练数据边界检查通过（0 个越界样本）
 - `python train_task2.py` 成功启动训练，Epoch 1 ~8-10 it/s 无报错
+
+---
+
+## 补充修复：Task 2 F1 接近 0 的根因分析与修复
+
+### 日期
+
+2026-07-26
+
+### 问题
+
+训练 Task 2 时 F1 极低（原始约 0.037），即使注释掉 FGM 也无改善：
+```
+current f1: 0.036966118315839715
+H_precision: 0.34218288984606815, H_recall: 0.0195384874482839
+```
+Recall 仅 2%，模型几乎不预测任何正样本。
+
+### 根因分析
+
+#### 1. 损失函数的类不平衡问题（主要原因）
+
+原始 `model_task2.py` 的 `compute_loss` 使用 GlobalPointer 风格的损失函数：
+
+```python
+def compute_loss(self, logits, labels, attention_mask):
+    loss1 = sum(exp(-logits) * mask * labels, dim=(1,2))     # 正样本项
+    loss2 = sum(exp(logits) * mask * (1 - labels), dim=(1,2)) # 负样本项
+    loss = mean(log(1 + loss1) + log(1 + loss2))
+```
+
+数据集正负样本比例为 **~1:2000**（每样本约 2.5 个 FE span，对阵约 5000 个负 span）。
+
+`log(1+sum)` 结构的致命缺陷：
+- `loss2` 的有效项数是 `loss1` 的 ~2000 倍
+- 分母 `(1 + loss1 + loss2)` 被 `loss2` 主导，稀释了每个正样本的梯度
+- 模型学到的最优策略是把所有 logits 推为负值（loss1 → 0，loss2 最小化），导致 recall ≈ 0
+
+#### 2. NoisyTune 初始化的预训练权重损伤（次要原因）
+
+训练脚本在开始时对整个模型参数添加噪声：
+```python
+noise_lambda = 0.15
+model.state_dict()[name][:] += (rand - 0.5) * noise_lambda * std(para)
+```
+
+实测 BERT embedding 权重产生 **4.7% 的相对扰动**，严重破坏预训练表征质量。
+
+### 修复过程与迭代
+
+#### 尝试 1：GlobalPointer loss + 正样本加权
+
+```python
+pos_weight = clamp(neg/pos, max=500)
+loss = mean(pos_weight * log(1 + loss1) + log(1 + loss2))
+```
+
+| weight cap | F1 | Recall | 现象 |
+|---|---|---|---|
+| 500 | 0.002 | 99% | 过度矫正，全预测为正 |
+| 50 | 0.002 | 100% | 仍然过度矫正 |
+
+**失败原因**：`log(1+sum)` 结构下，一旦模型偏向一方，分母被该方向的聚合值主导，个体 span 的梯度消失，进入不可逆的死循环。对权重极度敏感但无稳定中间状态。
+
+#### 尝试 2：替换为 BCEWithLogitsLoss（✓ 方向正确）
+
+```python
+def compute_loss(self, logits, labels, attention_mask):
+    H_attention_mask = torch.triu(...)
+    num_pos = labels.sum() + 1e-9
+    num_neg = H_attention_mask.sum() - num_pos + 1e-9
+    pos_weight = torch.clamp(num_neg / num_pos, max=50.0).detach()
+    bce = F.binary_cross_entropy_with_logits(
+        logits, labels, reduction='none', pos_weight=pos_weight)
+    loss = (bce * H_attention_mask).sum() / H_attention_mask.sum()
+    return loss
+```
+
+**优势**：每个 span 的 loss 独立计算，梯度自调节（sigmoid 饱和时梯度自动归零），不存在"总和控制个体"问题。
+
+| pos_weight max | F1 | Precision | Recall |
+|---|---|---|---|
+| 100 | 0.062 | 3.3% | 50.2% |
+| 50（+去 NoisyTune） | 0.069 | 3.8% | 46.9% |
+
+epoch 2 达到最佳 F1=**0.086**（P=4.8%, R=46.8%），epoch 3-5 稳定不再提升。
+
+#### dev 集 logit 分布验证
+
+```
+正样本 (n=5937):   mean=-0.33,  46.8% >= 0
+负样本 (n=632万):  mean=-6.66,  0.9% >= 0
+```
+
+模型有效学到了区分（正负均值差 6.3 个 logit 单位），但 2000:1 的极端不平衡下，固定阈值 0 时，0.9% 的负样本尾部（约 57k 假阳性）完全淹没了真阳性（约 2.8k），导致 precision 仅 ~4.7%。
+
+### 结论
+
+- 损失函数重构为 BCEWithLogitsLoss + 去除 NoisyTune 让 F1 从 0.037 → **0.086**（+132%）
+- 模型仍在学习（正负分布有效分离），瓶颈在于极端不平衡 + 固定阈值
+- 后续方向：搜索最佳阈值、增加训练 epoch、或引入更强特征编码

@@ -137,11 +137,11 @@ def train(model, train_loader, val_loader):
     ]
 
     # *******************  NoisyTune  ****************
-    noise_lambda = 0.15
-    for name, para in param_optimizer:
-        model.state_dict()[name][:] += \
-            (torch.rand(para.size()).to(device) - 0.5) * \
-            noise_lambda * torch.std(para)
+    # noise_lambda = 0.15
+    # for name, para in param_optimizer:
+    #     model.state_dict()[name][:] += \
+    #         (torch.rand(para.size()).to(device) - 0.5) * \
+    #         noise_lambda * torch.std(para)
 
     # ***********************************************
 
@@ -182,14 +182,14 @@ def train(model, train_loader, val_loader):
                 loss.backward()
 
             fgm.attack()  # embedding被修改了
-            # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
-            with autocast(enabled=args.fp16):
-                loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
-                                   device=device)['loss']
-            if args.fp16:
-                scaler.scale(loss_sum).backward()
-            else:
-                loss_sum.backward()
+            # # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
+            # with autocast(enabled=args.fp16):
+            #     loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
+            #                        device=device)['loss']
+            # if args.fp16:
+            #     scaler.scale(loss_sum).backward()
+            # else:
+            #     loss_sum.backward()
             fgm.restore()  # 恢复Embedding的参数
 
             if args.fp16:

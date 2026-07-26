@@ -6,7 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
 from transformers import AdamW
 from transformers import BertConfig, AutoTokenizer
 from dataset_task2 import Dataset
@@ -54,6 +54,10 @@ def get_model_input(data, device=None):
 
     bs = len(data)
     max_len = max([len(x[0]) for x in data])
+    # 防御性检查：确保H_label能容纳所有label索引（处理tokenizer剥离字符等边界情况）
+    for d in data:
+        for idx in d[3]:
+            max_len = max(max_len, idx[0] + 1, idx[1] + 1)
 
     input_ids_list = []
     attention_mask_list = []
@@ -151,7 +155,7 @@ def train(model, train_loader, val_loader):
     global_step = 0
     best_f1 = 0.0
     fgm = FGM(model)
-    scaler = GradScaler('cuda') if args.fp16 else None
+    scaler = GradScaler() if args.fp16 else None
     for i_epoch in range(1, 1 + args.num_train_epochs):
         total_loss = 0.0
         iter_bar = tqdm(train_loader, total=len(train_loader), desc=f'epoch_{i_epoch} ')
@@ -161,7 +165,7 @@ def train(model, train_loader, val_loader):
 
             input_ids, attention_mask, target, label, sentence_id, target_cls = batch
 
-            with autocast('cuda', enabled=args.fp16):
+            with autocast(enabled=args.fp16):
                 output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
                                device=device)
                 loss = output['loss']
@@ -179,7 +183,7 @@ def train(model, train_loader, val_loader):
 
             fgm.attack()  # embedding被修改了
             # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
-            with autocast('cuda', enabled=args.fp16):
+            with autocast(enabled=args.fp16):
                 loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
                                    device=device)['loss']
             if args.fp16:

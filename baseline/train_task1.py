@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.amp import autocast, GradScaler
+from torch.cuda.amp import autocast, GradScaler
 from transformers import AdamW
 from transformers import BertConfig, AutoTokenizer
 from dataset_task1 import Dataset
@@ -128,7 +128,7 @@ def train(model, train_loader, val_loader):
     global_step = 0
     best_acc = 0.0
     fgm = FGM(model)
-    scaler = GradScaler('cuda') if args.fp16 else None
+    scaler = GradScaler() if args.fp16 else None
     for i_epoch in range(1, 1 + args.num_train_epochs):
         total_loss = 0.0
         iter_bar = tqdm(train_loader, total=len(train_loader), desc=f'epoch_{i_epoch} ')
@@ -138,7 +138,7 @@ def train(model, train_loader, val_loader):
 
             input_ids, attention_mask, target, labels, sentence_id = batch
 
-            with autocast('cuda', enabled=args.fp16):
+            with autocast(enabled=args.fp16):
                 output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)
                 loss = output['loss']
 

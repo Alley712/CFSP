@@ -9,8 +9,10 @@ def construct_hyper_param():
     # train settings
     parser.add_argument('--num_train_epochs', default=10, type=int)
     parser.add_argument('--warmup_proportion', default=0.1, type=float)
-    parser.add_argument("--batch_size", default=3, type=int,
+    parser.add_argument("--batch_size", default=8, type=int,
                         help="Batch size")
+    parser.add_argument("--fp16", action='store_true', default=False,
+                        help="Use FP16 mixed precision")
     parser.add_argument("--update_freq", default=1, type=int,
                         help="update_freq")
     parser.add_argument("--accumulate_gradients", default=1, type=int,

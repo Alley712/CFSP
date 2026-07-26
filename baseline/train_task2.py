@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from torch.amp import autocast, GradScaler
 from transformers import AdamW
 from transformers import BertConfig, AutoTokenizer
 from dataset_task2 import Dataset
@@ -150,6 +151,7 @@ def train(model, train_loader, val_loader):
     global_step = 0
     best_f1 = 0.0
     fgm = FGM(model)
+    scaler = GradScaler('cuda') if args.fp16 else None
     for i_epoch in range(1, 1 + args.num_train_epochs):
         total_loss = 0.0
         iter_bar = tqdm(train_loader, total=len(train_loader), desc=f'epoch_{i_epoch} ')
@@ -159,12 +161,10 @@ def train(model, train_loader, val_loader):
 
             input_ids, attention_mask, target, label, sentence_id, target_cls = batch
 
-            output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
-                           device=device)
-
-            # output = model(input_ids=input_ids, attention_mask=attention_mask, labels=label)
-
-            loss = output['loss']
+            with autocast('cuda', enabled=args.fp16):
+                output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
+                               device=device)
+                loss = output['loss']
 
             total_loss += loss.item()
 
@@ -172,17 +172,24 @@ def train(model, train_loader, val_loader):
                 print(
                     f'loss: {total_loss / (step + 1)}')
 
-            loss.backward()
+            if args.fp16:
+                scaler.scale(loss).backward()
+            else:
+                loss.backward()
 
             fgm.attack()  # embedding被修改了
             # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
-            loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
-                               device=device)[
-                    'loss']
-            # loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, labels=label)["loss"]
-            loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
+            with autocast('cuda', enabled=args.fp16):
+                loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
+                                   device=device)['loss']
+            if args.fp16:
+                scaler.scale(loss_sum).backward()
+            else:
+                loss_sum.backward()
             fgm.restore()  # 恢复Embedding的参数
 
+            if args.fp16:
+                scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
@@ -190,7 +197,11 @@ def train(model, train_loader, val_loader):
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
-                optimizer.step()
+                if args.fp16:
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
 

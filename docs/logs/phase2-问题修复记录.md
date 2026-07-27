@@ -439,6 +439,13 @@ PyTorch 版本升级 (1.13 → 2.1)
 | transformers | 4.24.x |
 | CUDA | 11.6 |
 
+完整环境配置见 `baseline/environment_baseline.yml`，可通过以下命令一键复现：
+
+```bash
+conda env create -f baseline/environment_baseline.yml
+conda activate baseline
+```
+
 不做任何代码修改，直接使用原始 baseline 代码训练三个任务（epoch=5，NoisyTune ON，FGM ON）。
 
 ### 提交结果

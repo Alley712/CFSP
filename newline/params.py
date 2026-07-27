@@ -19,15 +19,15 @@ def construct_hyper_param():
 
     # bert settings
     parser.add_argument("--config_file",
-                        default='./chinese_bert_wwm_ext/config.json',
+                        default='./chinese_roberta_wwm_ext/config.json',
                         type=str,
                         help="bert_config_file")
     parser.add_argument("--vocab_file",
-                        default='./chinese_bert_wwm_ext/vocab.txt',
+                        default='./chinese_roberta_wwm_ext/vocab.txt',
                         type=str,
                         help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--init_checkpoint",
-                        default='./chinese_bert_wwm_ext/pytorch_model.bin',
+                        default='./chinese_roberta_wwm_ext/pytorch_model.bin',
                         type=str,
                         help="bert_init_checkpoint")
 

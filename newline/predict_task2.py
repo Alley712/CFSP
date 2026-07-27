@@ -128,7 +128,7 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer(vocab_file=args.vocab_file,
                               do_lower_case=True)
 
-    test_dataset = Dataset("./dataset/cfn-test-B.json",
+    test_dataset = Dataset("./dataset/cfn-test-A.json",
                             "./dataset/frame_info.json",
                             tokenizer)
 

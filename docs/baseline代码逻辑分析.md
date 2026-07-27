@@ -1,6 +1,8 @@
 # Baseline 代码逻辑分析（零基础版）
 
 > 本文假设你完全没接触过机器学习/NLP，从最基础的概念讲起。文中所有专业术语都会先用白话解释。
+> 
+> **分析的代码版本**：`baseline/` 目录下的原始基线代码（PyTorch 1.13 + transformers 4.24 原生环境）。所有 tokenizer 调用均为旧版 `encode_plus` API，不包含 `is_split_into_words`、`GradScaler`、`autocast` 等新版特性。
 
 ---
 
@@ -73,8 +75,10 @@
 
 ```python
 # dataset_task1.py:31
-data = self.tokenizer(list(d1['text']), is_split_into_words=True)
+data = self.tokenizer.encode_plus(list(d1['text']))
 ```
+
+`encode_plus` 是旧版 transformers API（4.24 时代）的调用方式，传入字符列表后 BERT 将每个字单独当作一个 token 处理。
 
 例如："购买电脑" → `['购', '买', '电', '脑']` → 每个字变成一个数字 ID。
 

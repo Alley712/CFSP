@@ -9,3 +9,8 @@ __pycache__/
 .ipynb_checkpoints/
 baseline/saves/
 baseline/submit.zip
+baseline/chinese_bert_wwm_ext/
+newline/chinese_bert_wwm_ext/
+newline/chinese_roberta_wwm_ext/
+newline/saves/
+*.bin

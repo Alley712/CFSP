@@ -9,10 +9,8 @@ def construct_hyper_param():
     # train settings
     parser.add_argument('--num_train_epochs', default=10, type=int)
     parser.add_argument('--warmup_proportion', default=0.1, type=float)
-    parser.add_argument("--batch_size", default=8, type=int,
+    parser.add_argument("--batch_size", default=3, type=int,
                         help="Batch size")
-    parser.add_argument("--fp16", action='store_true', default=False,
-                        help="Use FP16 mixed precision")
     parser.add_argument("--update_freq", default=1, type=int,
                         help="update_freq")
     parser.add_argument("--accumulate_gradients", default=1, type=int,
@@ -20,20 +18,16 @@ def construct_hyper_param():
     parser.add_argument('--lr', default=2e-5, type=float, help='model learning rate.')
 
     # bert settings
-    parser.add_argument("--model_dir",
-                        default='../models/chinese-bert-wwm-ext',
-                        type=str,
-                        help="Pretrained model directory")
     parser.add_argument("--config_file",
-                        default='../models/chinese-bert-wwm-ext/config.json',
+                        default='./chinese_bert_wwm_ext/config.json',
                         type=str,
                         help="bert_config_file")
     parser.add_argument("--vocab_file",
-                        default='../models/chinese-bert-wwm-ext/vocab.txt',
+                        default='./chinese_bert_wwm_ext/vocab.txt',
                         type=str,
                         help="The vocabulary file that the BERT model was trained on.")
     parser.add_argument("--init_checkpoint",
-                        default='../models/chinese-bert-wwm-ext/pytorch_model.bin',
+                        default='./chinese_bert_wwm_ext/pytorch_model.bin',
                         type=str,
                         help="bert_init_checkpoint")
 

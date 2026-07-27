@@ -6,9 +6,8 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.cuda.amp import autocast, GradScaler
 from transformers import AdamW
-from transformers import BertConfig, AutoTokenizer
+from transformers import BertConfig, BertTokenizer, BertForTokenClassification
 from dataset_task2 import Dataset
 from params import args
 from model_task2 import Model
@@ -54,10 +53,6 @@ def get_model_input(data, device=None):
 
     bs = len(data)
     max_len = max([len(x[0]) for x in data])
-    # 防御性检查：确保H_label能容纳所有label索引（处理tokenizer剥离字符等边界情况）
-    for d in data:
-        for idx in d[3]:
-            max_len = max(max_len, idx[0] + 1, idx[1] + 1)
 
     input_ids_list = []
     attention_mask_list = []
@@ -74,9 +69,9 @@ def get_model_input(data, device=None):
         sentence_id.append(d[4])
         target_cls.append(d[5])
 
-    input_ids = np.array(input_ids_list, dtype=np.int64)
-    attention_mask = np.array(attention_mask_list, dtype=np.int64)
-    target_cls = np.array(target_cls, dtype=np.int64)
+    input_ids = np.array(input_ids_list, dtype=np.compat.long)
+    attention_mask = np.array(attention_mask_list, dtype=np.compat.long)
+    target_cls = np.array(target_cls, dtype=np.compat.long)
 
     input_ids = torch.from_numpy(input_ids).to(device)
     attention_mask = torch.from_numpy(attention_mask).to(device)
@@ -137,11 +132,11 @@ def train(model, train_loader, val_loader):
     ]
 
     # *******************  NoisyTune  ****************
-    # noise_lambda = 0.15
-    # for name, para in param_optimizer:
-    #     model.state_dict()[name][:] += \
-    #         (torch.rand(para.size()).to(device) - 0.5) * \
-    #         noise_lambda * torch.std(para)
+    noise_lambda = 0.15
+    for name, para in param_optimizer:
+        model.state_dict()[name][:] += \
+            (torch.rand(para.size()).to(device) - 0.5) * \
+            noise_lambda * torch.std(para)
 
     # ***********************************************
 
@@ -155,7 +150,6 @@ def train(model, train_loader, val_loader):
     global_step = 0
     best_f1 = 0.0
     fgm = FGM(model)
-    scaler = GradScaler() if args.fp16 else None
     for i_epoch in range(1, 1 + args.num_train_epochs):
         total_loss = 0.0
         iter_bar = tqdm(train_loader, total=len(train_loader), desc=f'epoch_{i_epoch} ')
@@ -165,10 +159,12 @@ def train(model, train_loader, val_loader):
 
             input_ids, attention_mask, target, label, sentence_id, target_cls = batch
 
-            with autocast(enabled=args.fp16):
-                output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
-                               device=device)
-                loss = output['loss']
+            output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
+                           device=device)
+
+            # output = model(input_ids=input_ids, attention_mask=attention_mask, labels=label)
+
+            loss = output['loss']
 
             total_loss += loss.item()
 
@@ -176,24 +172,17 @@ def train(model, train_loader, val_loader):
                 print(
                     f'loss: {total_loss / (step + 1)}')
 
-            if args.fp16:
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
+            loss.backward()
 
             fgm.attack()  # embedding被修改了
-            # # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
-            # with autocast(enabled=args.fp16):
-            #     loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
-            #                        device=device)['loss']
-            # if args.fp16:
-            #     scaler.scale(loss_sum).backward()
-            # else:
-            #     loss_sum.backward()
+            # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
+            loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=label,
+                               device=device)[
+                    'loss']
+            # loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, labels=label)["loss"]
+            loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
             fgm.restore()  # 恢复Embedding的参数
 
-            if args.fp16:
-                scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
@@ -201,11 +190,7 @@ def train(model, train_loader, val_loader):
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
-                if args.fp16:
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    optimizer.step()
+                optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
 
@@ -243,13 +228,14 @@ if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
+    tokenizer = BertTokenizer(vocab_file=args.vocab_file,
+                              do_lower_case=True)
 
-    train_dataset = Dataset("../data/cfn-dataset/cfn-train.json",
-                            "../data/cfn-dataset/frame_info.json",
+    train_dataset = Dataset("./dataset/cfn-train.json",
+                            "./dataset/frame_info.json",
                             tokenizer)
-    dev_dataset = Dataset("../data/cfn-dataset/cfn-dev.json",
-                          "../data/cfn-dataset/frame_info.json",
+    dev_dataset = Dataset("./dataset/cfn-dev.json",
+                          "./dataset/frame_info.json",
                           tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)
@@ -262,7 +248,7 @@ if __name__ == '__main__':
     msg = model.load_state_dict(state, strict=False)
     # model.load_state_dict(torch.load('', map_location='cpu'))
     model = model.to(device)
-    args.num_train_epochs = 20
+    args.num_train_epochs = 5
     train_loader = DataLoader(
         batch_size=args.batch_size,
         dataset=train_dataset,

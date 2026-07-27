@@ -28,7 +28,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item):
         d1 = self.all_data[item]
-        data = self.tokenizer(list(d1['text']), is_split_into_words=True)
+        data = self.tokenizer.encode_plus(list(d1['text']))
         input_ids = data.data['input_ids']
         attention_mask = data.data['attention_mask']
         target = [d1["target"][-1]["start"] + 1, d1["target"][-1]["end"] + 1]
@@ -42,8 +42,8 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer(
         vocab_file='./chinese_bert_wwm_ext/vocab.txt',
         do_lower_case=True)
-    dataset = Dataset("../data/cfn-dataset/cfn-train.json",
-                      "../data/cfn-dataset/frame_info.json",
+    dataset = Dataset("./dataset/cfn-train.json",
+                      "./dataset/frame_info.json",
                       tokenizer=tokenizer)
 
     dataset[0]

@@ -13,9 +13,8 @@
 
 ## 二、环境约束
 
-- GPU：RTX 3050 Laptop 4GB VRAM
-- 方案：FP16 混合精度 + batch_size=1~2 + gradient accumulation
-- 如需要跑大模型，租用 AutoDL RTX 4060（~¥1-2/h）
+- GPU：RTX 3090 租用卡 24GB VRAM（AutoDL 等平台）
+- 方案：FP16 混合精度（默认），batch_size=8，无需梯度累积
 
 ## 三、技术选型
 
@@ -23,7 +22,7 @@
 |------|------|------|
 | 预训练模型 | `hfl/chinese-roberta-wwm-ext` | 比 BERT-wwm 效果好，中文 NLP 通用 baseline |
 | 微调框架 | HuggingFace Transformers + PyTorch | 最通用、文档丰富 |
-| 精度 | FP16 混合精度（torch.cuda.amp） | 4GB 显存下的必要措施 |
+| 精度 | FP16 混合精度（torch.cuda.amp） | 加速训练，3090 24GB 显存充裕 |
 | 任务架构 | 基于 baseline 的 GlobalPointer 改进 | 保留成熟部分，针对性改进薄弱环节 |
 
 ## 四、项目结构
@@ -31,40 +30,53 @@
 ```
 D:/CFSP/
 ├── data/
-│   └── cfn-dataset/          # 原始数据集（已存在）
-├── baseline/                 # 官方 baseline 代码（已存在）
-├── models/                   # 预训练模型权重（chinese-roberta-wwm-ext）
-├── src/                      # 改进后的训练代码
-│   ├── config.py             # 统一配置
-│   ├── data_utils.py         # 数据处理公共模块
-│   ├── task1/
-│   │   ├── dataset.py
-│   │   ├── model.py
-│   │   ├── train.py
-│   │   └── predict.py
-│   ├── task2/
-│   │   ├── dataset.py
-│   │   ├── model.py
-│   │   ├── train.py
-│   │   └── predict.py
-│   └── task3/
-│       ├── dataset.py
-│       ├── model.py
-│       ├── train.py
-│       └── predict.py
-├── saves/                    # 模型保存目录
-├── submissions/              # 提交文件目录
-│   └── submit.zip
+│   ├── cfn-dataset/          # 原始数据集（已存在）
+│   └── raw_zips/             # 原始压缩包
+│       ├── cfn-dataset.zip
+│       └── CFN-B.zip
+├── baseline/                 # 官方 baseline 代码（旧依赖环境：PyTorch 1.13）
+│   ├── chinese_bert_wwm_ext/ # BERT 预训练模型
+│   ├── dataset/              # 数据集副本
+│   ├── saves/                # 各任务模型权重
+│   ├── dataset_task1-3.py    # 数据加载
+│   ├── model_task1-3.py      # 模型定义（GlobalPointer）
+│   ├── train_task1-3.py      # 训练脚本
+│   ├── predict_task1-3.py    # 预测脚本
+│   ├── params.py             # 超参数配置
+│   └── requirements.txt
+├── newline/                  # 重构版 baseline（新依赖环境：PyTorch 2.1）
+│   ├── chinese_bert_wwm_ext/ # BERT 预训练模型
+│   ├── dataset/              # 数据集副本
+│   ├── saves/                # 各任务模型权重
+│   ├── dataset_task1-3.py
+│   ├── model_task1-3.py
+│   ├── train_task1-3.py
+│   ├── predict_task1-3.py
+│   ├── params.py
+│   └── requirements.txt
+├── models/                   # 预训练模型权重目录
+├── submissions/              # 天池提交文件
+│   ├── List_A/
+│   │   ├── submit_1st.zip    # 首次打榜（新环境，Score 37.39）
+│   │   └── submit_2nd(best).zip  # 降级复现（Score 69.68）
+│   └── List_B/
+│       └── submit_1st(best).zip  # B 榜复现（Score 68.80）
 ├── experiments/              # 实验记录
-│   └── exp_log.md
+│   ├── phase1-环境配置记录.md
+│   └── phase2-问题修复记录.md
+├── downloads/                # 手动下载的文件
+│   └── torch-2.5.1+cu121-cp310-cp310-win_amd64.whl
 └── docs/
-    ├── 任务详解.md
     ├── 任务介绍.md
+    ├── 任务详解.md
+    ├── baseline代码逻辑分析.md
     ├── 于艳华夏令营机器学习考核须知.md
     └── superpowers/
         └── specs/
             └── 2026-07-25-cfsp-design.md
 ```
+
+> **说明**：`baseline/` 和 `newline/` 是同一套代码的两个副本，分别对应旧版 (PyTorch 1.13) 和新版 (PyTorch 2.1) 依赖环境。当前以 `baseline/`（旧版环境）为主进行训练和提交，因为版本差异对 Task 2 自定义 loss 的影响已验证（详见 `experiments/phase2-问题修复记录.md`）。
 
 ## 五、分阶段执行计划
 
@@ -193,7 +205,7 @@ Baseline 的 Task 3 模型结构与 Task 1 完全相同——仅用 BERT + Globa
 
 | 风险 | 概率 | 应对 |
 |------|------|------|
-| 3050 OOM 无法训练 | 中 | 减小 batch_size → 1，max_seq_len → 256，使用 gradient checkpointing |
+| 3090 租用实例不稳定 | 低 | 定期保存 checkpoint，代码和数据在本地有备份 |
 | RoBERTa 词表不兼容 | 中 | 改为 `AutoTokenizer.from_pretrained()`，自动处理 |
 | Task 3 架构改动不 work | 中高 | 回退到 baseline 版本，至少跑出结果 |
 | 数据增强降低性能 | 低 | 只增强 1 倍而非 2 倍，确保增强质量 |

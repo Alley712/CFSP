@@ -3,13 +3,12 @@
 import torch
 import codecs
 import json
-import os
 from functools import partial
 import numpy as np
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import BertConfig, AutoTokenizer, BertForTokenClassification
+from transformers import BertConfig, BertTokenizer, BertForTokenClassification
 from params import args
 from model_task3 import Model
 
@@ -62,7 +61,7 @@ class Dataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item):
         d1 = self.data[item]
-        data = self.tokenizer(list(d1['text']), is_split_into_words=True)
+        data = self.tokenizer.encode_plus(list(d1['text']))
         input_ids = data.data['input_ids']
         attention_mask = data.data['attention_mask']
         label_idx = d1["label_idx"]
@@ -102,8 +101,8 @@ def get_model_input(data, device=None):
         sentence_id.append(d[3])
         ori_target.append(d[4])
 
-    input_ids = np.array(input_ids_list, dtype=np.int64)
-    attention_mask = np.array(attention_mask_list, dtype=np.int64)
+    input_ids = np.array(input_ids_list, dtype=np.compat.long)
+    attention_mask = np.array(attention_mask_list, dtype=np.compat.long)
 
     input_ids = torch.from_numpy(input_ids).to(device)
     attention_mask = torch.from_numpy(attention_mask).to(device)
@@ -128,7 +127,6 @@ def test(model, val_loader):
 
             pass
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
-    os.makedirs('dataset', exist_ok=True)
     with open('dataset/A_task3_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 
@@ -137,11 +135,12 @@ if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
+    tokenizer = BertTokenizer(vocab_file=args.vocab_file,
+                              do_lower_case=True)
 
-    test_dataset = Dataset("../data/cfn-dataset/cfn-test-A.json",
-                            "../data/cfn-dataset/frame_info.json",
-                            "dataset/A_task2_test.json",
+    test_dataset = Dataset("./dataset/cfn-test-B.json",
+                            "./dataset/frame_info.json",
+                            "./dataset/B_task2_test.json",
                             tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)

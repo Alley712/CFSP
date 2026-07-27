@@ -7,9 +7,8 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from torch.cuda.amp import autocast, GradScaler
 from transformers import AdamW
-from transformers import BertConfig, AutoTokenizer
+from transformers import BertConfig, BertTokenizer, BertForTokenClassification
 from dataset_task1 import Dataset
 from params import args
 from model_task1 import Model
@@ -69,9 +68,9 @@ def get_model_input(data, device=None):
         labels.append(d[3])
         sentence_id.append(d[4])
 
-    input_ids = np.array(input_ids_list, dtype=np.int64)
-    attention_mask = np.array(attention_mask_list, dtype=np.int64)
-    labels = np.array(labels, dtype=np.int64)
+    input_ids = np.array(input_ids_list, dtype=np.compat.long)
+    attention_mask = np.array(attention_mask_list, dtype=np.compat.long)
+    labels = np.array(labels, dtype=np.compat.long)
 
     input_ids = torch.from_numpy(input_ids).to(device)
     attention_mask = torch.from_numpy(attention_mask).to(device)
@@ -128,7 +127,6 @@ def train(model, train_loader, val_loader):
     global_step = 0
     best_acc = 0.0
     fgm = FGM(model)
-    scaler = GradScaler() if args.fp16 else None
     for i_epoch in range(1, 1 + args.num_train_epochs):
         total_loss = 0.0
         iter_bar = tqdm(train_loader, total=len(train_loader), desc=f'epoch_{i_epoch} ')
@@ -138,9 +136,9 @@ def train(model, train_loader, val_loader):
 
             input_ids, attention_mask, target, labels, sentence_id = batch
 
-            with autocast(enabled=args.fp16):
-                output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)
-                loss = output['loss']
+            output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)
+
+            loss = output['loss']
 
             total_loss += loss.item()
 
@@ -148,10 +146,7 @@ def train(model, train_loader, val_loader):
                 print(
                     f'loss: {total_loss / (step + 1)}')
 
-            if args.fp16:
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
+            loss.backward()
 
             # fgm.attack()  # embedding被修改了
             # # optimizer.zero_grad()  # 如果不想累加梯度，就把这里的注释取消
@@ -159,8 +154,6 @@ def train(model, train_loader, val_loader):
             # loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
             # fgm.restore()  # 恢复Embedding的参数
 
-            if args.fp16:
-                scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
@@ -168,11 +161,7 @@ def train(model, train_loader, val_loader):
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
-                if args.fp16:
-                    scaler.step(optimizer)
-                    scaler.update()
-                else:
-                    optimizer.step()
+                optimizer.step()
                 optimizer.zero_grad()
                 global_step += 1
 
@@ -208,13 +197,14 @@ if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
+    tokenizer = BertTokenizer(vocab_file=args.vocab_file,
+                              do_lower_case=True)
 
-    train_dataset = Dataset("../data/cfn-dataset/cfn-train.json",
-                            "../data/cfn-dataset/frame_info.json",
+    train_dataset = Dataset("./dataset/cfn-train.json",
+                            "./dataset/frame_info.json",
                             tokenizer)
-    dev_dataset = Dataset("../data/cfn-dataset/cfn-dev.json",
-                          "../data/cfn-dataset/frame_info.json",
+    dev_dataset = Dataset("./dataset/cfn-dev.json",
+                          "./dataset/frame_info.json",
                           tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)

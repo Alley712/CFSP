@@ -15,7 +15,7 @@ from model_task3 import Model
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_file, label_file, task1_file, task2_file, tokenizer, for_test=False):
+    def __init__(self, json_file, label_file, task2_file, tokenizer, for_test=False):
         aeda_chars = [".", ";", "?", ":", "!", ",", "，", "。"]
         self.for_test = for_test
         self.tokenizer = tokenizer
@@ -23,8 +23,6 @@ class Dataset(torch.utils.data.Dataset):
             self.all_data = json.load(f)
         with codecs.open(label_file, 'r', encoding='utf8') as f:
             self.ori_labels = json.load(f)
-        with codecs.open(task1_file, 'r', encoding='utf8') as f:  # Phase 3.2
-            task1_data = json.load(f)
         with codecs.open(task2_file, 'r', encoding='utf8') as f:
             self.task2_data = json.load(f)
         self.idx2label = []
@@ -35,16 +33,6 @@ class Dataset(torch.utils.data.Dataset):
         self.label2idx = {}
         for i in range(len(self.idx2label)):
             self.label2idx[self.idx2label[i]] = i
-
-        # Phase 3.2: sent2frame from Task 1 output
-        self.sent2frame = {}
-        for item in task1_data:
-            self.sent2frame[item[0]] = item[1]
-
-        # Phase 3.2: frame_name → frame_id mapping
-        self.frame2idx = {}
-        for i, line in enumerate(self.ori_labels):
-            self.frame2idx[line["frame_name"]] = i
         self.data_dict = {}
         for line in self.all_data:
             text = line["text"]
@@ -52,23 +40,18 @@ class Dataset(torch.utils.data.Dataset):
             self.data_dict[line["sentence_id"]] = {"text": text, "target": target}
         self.data = []
         for line in self.task2_data:
-            sent_id = line[0]
-            text = self.data_dict[sent_id]["text"]
-            target = self.data_dict[sent_id]["target"]
+            text = self.data_dict[line[0]]["text"]
+            target = self.data_dict[line[0]]["target"]
             if line[2] + 1 < target[0]:
                 label_idx = [line[1] + 1, line[2] + 1]
             elif line[1] + 1 > target[1]:
                 label_idx = [line[1] + 3, line[2] + 3]
-            # Phase 3.2: get frame_id from Task 1 prediction
-            frame_name = self.sent2frame.get(sent_id, self.ori_labels[0]["frame_name"])
-            frame_id = self.frame2idx[frame_name]
             self.data.append({
                 'text': text,
                 "label_idx": label_idx,
-                "sentence_id": sent_id,
+                "sentence_id": line[0],
                 "target": target,
-                "ori_target": [line[1], line[2]],
-                "frame_id": frame_id  # Phase 3.2
+                "ori_target": [line[1], line[2]]
             })
         self.num_labels = len(self.idx2label)
         pass
@@ -88,9 +71,8 @@ class Dataset(torch.utils.data.Dataset):
         attention_mask = attention_mask + [1, 1]
         sentence_id = d1["sentence_id"]
         ori_target = d1["ori_target"]
-        frame_id = d1["frame_id"]  # Phase 3.2
 
-        return input_ids, attention_mask, label_idx, sentence_id, ori_target, frame_id
+        return input_ids, attention_mask, label_idx, sentence_id, ori_target
 
 
 def get_model_input(data, device=None):
@@ -111,7 +93,6 @@ def get_model_input(data, device=None):
     target = []
     sentence_id = []
     ori_target = []
-    frame_ids = []  # Phase 3.2
 
     for d in data:
         input_ids_list.append(pad(d[0], max_len, 0))
@@ -119,16 +100,14 @@ def get_model_input(data, device=None):
         target.append(d[2])
         sentence_id.append(d[3])
         ori_target.append(d[4])
-        frame_ids.append(d[5])  # Phase 3.2
 
     input_ids = np.array(input_ids_list, dtype=np.compat.long)
     attention_mask = np.array(attention_mask_list, dtype=np.compat.long)
 
     input_ids = torch.from_numpy(input_ids).to(device)
     attention_mask = torch.from_numpy(attention_mask).to(device)
-    frame_ids = torch.tensor(frame_ids, dtype=torch.long).to(device)  # Phase 3.2
 
-    return input_ids, attention_mask, target, sentence_id, ori_target, frame_ids
+    return input_ids, attention_mask, target, sentence_id, ori_target
 
 
 def test(model, val_loader):
@@ -137,10 +116,10 @@ def test(model, val_loader):
     predicts = []
     with torch.no_grad():
         for step, batch in tqdm(enumerate(val_loader), total=len(val_loader), desc='eval'):
-            input_ids, attention_mask, target, sentence_id, ori_target, frame_ids = batch
+            input_ids, attention_mask, target, sentence_id, ori_target = batch
 
             output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=None,
-                           device=device, for_test=True, frame_ids=frame_ids)
+                           device=device, for_test=True)
             logits = output["logits"]
             pred = torch.argmax(F.softmax(logits, dim=-1), dim=-1)
             for i in range(len(pred)):
@@ -161,14 +140,12 @@ if __name__ == '__main__':
 
     test_dataset = Dataset("./dataset/cfn-test-B.json",
                             "./dataset/frame_info.json",
-                            "./dataset/B_task1_test.json",   # Phase 3.2: Task 1 output
                             "./dataset/B_task2_test.json",
                             tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)
     # BertConfig.from_pretrained('hfl/chinese-bert-wwm-ext')
     config.num_labels = test_dataset.num_labels
-    config.num_frames = len(test_dataset.frame2idx)  # Phase 3.2
     model = Model(config)
     # load_pretrained_bert(model, args.init_checkpoint)
     state = torch.load("saves/model_task3_best.bin", map_location='cpu')

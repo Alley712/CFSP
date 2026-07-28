@@ -60,7 +60,6 @@ def get_model_input(data, device=None):
     target = []
     labels = []
     sentence_id = []
-    frame_ids = []  # Phase 3.2
 
     for d in data:
         input_ids_list.append(pad(d[0], max_len, 0))
@@ -68,18 +67,16 @@ def get_model_input(data, device=None):
         target.append(d[2])
         labels.append(d[3])
         sentence_id.append(d[4])
-        frame_ids.append(d[5])  # Phase 3.2
 
     input_ids = np.array(input_ids_list, dtype=np.compat.long)
     attention_mask = np.array(attention_mask_list, dtype=np.compat.long)
     labels = np.array(labels, dtype=np.compat.long)
-    frame_ids = torch.tensor(frame_ids, dtype=torch.long).to(device)  # Phase 3.2
 
     input_ids = torch.from_numpy(input_ids).to(device)
     attention_mask = torch.from_numpy(attention_mask).to(device)
     labels = torch.from_numpy(labels).to(device)
 
-    return input_ids, attention_mask, target, labels, sentence_id, frame_ids
+    return input_ids, attention_mask, target, labels, sentence_id
 
 
 def eval(model, val_loader):
@@ -88,10 +85,10 @@ def eval(model, val_loader):
     total = 0.0
     with torch.no_grad():
         for step, batch in tqdm(enumerate(val_loader), total=len(val_loader), desc='eval'):
-            input_ids, attention_mask, target, labels, sentence_id, frame_ids = batch
+            input_ids, attention_mask, target, labels, sentence_id = batch
 
             output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels,
-                           device=device, for_test=True, frame_ids=frame_ids)
+                           device=device, for_test=True)
             logits = output["logits"]
             pred = torch.argmax(F.softmax(logits, dim=-1), dim=-1)
             correct += (pred == labels).sum().item()
@@ -136,10 +133,10 @@ def train(model, train_loader, val_loader):
         for step, batch in enumerate(iter_bar):
             global_step += 1
 
-            input_ids, attention_mask, target, labels, sentence_id, frame_ids = batch
+            input_ids, attention_mask, target, labels, sentence_id = batch
 
             output = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels,
-                           device=device, frame_ids=frame_ids)
+                           device=device)
 
             loss = output['loss']
 
@@ -215,7 +212,6 @@ if __name__ == '__main__':
     config = BertConfig.from_json_file(args.config_file)
     # BertConfig.from_pretrained('hfl/chinese-bert-wwm-ext')
     config.num_labels = train_dataset.num_labels
-    config.num_frames = len(train_dataset.frame2idx)  # Phase 3.2
     model = Model(config)
     # load_pretrained_bert(model, args.init_checkpoint)
     state = torch.load(args.init_checkpoint, map_location='cpu')

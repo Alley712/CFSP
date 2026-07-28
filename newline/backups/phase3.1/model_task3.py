@@ -20,19 +20,6 @@ class Model(nn.Module):
         self.dropout = nn.Dropout(classifier_dropout)
         self.dense = nn.Linear(config.hidden_size, config.num_labels * self.inner_dim * 2)
 
-        # Phase 3.2: Frame embedding for Task 3 enhancement
-        if hasattr(config, 'num_frames') and config.num_frames is not None:
-            self.num_frames = config.num_frames
-            self.frame_emb_dim = 256
-            self.frame_embedding = nn.Embedding(
-                self.num_frames, self.frame_emb_dim)
-            self.frame_proj = nn.Linear(
-                self.frame_emb_dim, config.num_labels)
-        else:
-            self.num_frames = None
-            self.frame_embedding = None
-            self.frame_proj = None
-
 
     def sinusoidal_position_embedding(self, batch_size, seq_len, output_dim, device):
         position_ids = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(-1)
@@ -46,7 +33,7 @@ class Model(nn.Module):
         embeddings = embeddings.to(device)
         return embeddings
 
-    def forward(self, input_ids=None, attention_mask=None, target=None, labels=None, device=None, for_test=False, frame_ids=None):
+    def forward(self, input_ids=None, attention_mask=None, target=None, labels=None, device=None, for_test=False):
 
         bert_out = self.bert(input_ids=input_ids, attention_mask=attention_mask, output_hidden_states=True)
         # hidden_token = bert_out.last_hidden_state
@@ -75,12 +62,6 @@ class Model(nn.Module):
         logits = torch.einsum('bmhd,bnhd->bhmn', qw, kw)
         logits = logits / self.inner_dim ** 0.5
         token_logits = torch.concat([logits[i][:, target[i][0], target[i][1]].unsqueeze(0) for i in range(len(target))], dim=0)
-
-        # Phase 3.2: Frame feature injection (Strategy A: bias)
-        if frame_ids is not None and self.frame_embedding is not None:
-            frame_emb = self.frame_embedding(frame_ids)
-            frame_bias = self.frame_proj(frame_emb)
-            token_logits = token_logits + frame_bias
 
         if for_test:
             loss = None

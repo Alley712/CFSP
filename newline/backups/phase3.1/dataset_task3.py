@@ -22,18 +22,11 @@ class Dataset(torch.utils.data.Dataset):
         self.label2idx = {}
         for i in range(len(self.idx2label)):
             self.label2idx[self.idx2label[i]] = i
-
-        # Phase 3.2: frame_name → frame_id mapping
-        self.frame2idx = {}
-        for i, line in enumerate(self.ori_labels):
-            self.frame2idx[line["frame_name"]] = i
-
         self.data = []
         for line in self.all_data:
             text = line["text"]
             target = [line["target"][-1]["start"] + 1, line["target"][-1]["end"] + 1]
             cfn_spans = line["cfn_spans"]
-            frame_id = self.frame2idx[line["frame"]]  # Phase 3.2: gold frame
             for spans in cfn_spans:
                 if spans["end"] + 1 < target[0]:
                     label_idx = [spans["start"] + 1, spans["end"] + 1]
@@ -46,8 +39,7 @@ class Dataset(torch.utils.data.Dataset):
                     "label_idx": label_idx,
                     "sentence_id": line["sentence_id"],
                     "target": target,
-                    "fe_text": fe_text,
-                    "frame_id": frame_id  # Phase 3.2
+                    "fe_text": fe_text
                 })
         self.num_labels = len(self.idx2label)
         pass
@@ -67,9 +59,8 @@ class Dataset(torch.utils.data.Dataset):
                                                                                                 target[1] + 1:]
         attention_mask = attention_mask + [1, 1]
         sentence_id = d1["sentence_id"]
-        frame_id = d1["frame_id"]  # Phase 3.2
 
-        return input_ids, attention_mask, label_idx, label, sentence_id, frame_id
+        return input_ids, attention_mask, label_idx, label, sentence_id
 
 
 if __name__ == '__main__':

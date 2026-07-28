@@ -117,7 +117,7 @@ def test(model, val_loader):
                 predicts += idx
             pass
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
-    with open('dataset/B_task2_test.json', 'w', encoding='utf8', newline='\n') as f:
+    with open('dataset/A_task2_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 
 
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer(vocab_file=args.vocab_file,
                               do_lower_case=True)
 
-    test_dataset = Dataset("./dataset/cfn-test-B.json",
+    test_dataset = Dataset("./dataset/cfn-test-A.json",
                             "./dataset/frame_info.json",
                             tokenizer)
 

@@ -44,10 +44,12 @@ D:/CFSP/
 │   ├── predict_task1-3.py    # 预测脚本
 │   ├── params.py             # 超参数配置
 │   └── requirements.txt
-├── newline/                  # 重构版 baseline（新依赖环境：PyTorch 2.1）
+├── newline/                  # 开发目录（Phase 3 改进迭代，同 PyTorch 1.13）
 │   ├── chinese_bert_wwm_ext/ # BERT 预训练模型
+│   ├── chinese_roberta_wwm_ext/  # RoBERTa 预训练模型（Phase 3.1）
 │   ├── dataset/              # 数据集副本
 │   ├── saves/                # 各任务模型权重
+│   ├── backups/              # Phase 3 实验前的代码备份
 │   ├── dataset_task1-3.py
 │   ├── model_task1-3.py
 │   ├── train_task1-3.py
@@ -76,7 +78,7 @@ D:/CFSP/
             └── 2026-07-25-cfsp-design.md
 ```
 
-> **说明**：`baseline/` 和 `newline/` 是同一套代码的两个副本，分别对应旧版 (PyTorch 1.13) 和新版 (PyTorch 2.1) 依赖环境。当前以 `baseline/`（旧版环境）为主进行训练和提交，因为版本差异对 Task 2 自定义 loss 的影响已验证（详见 `experiments/phase2-问题修复记录.md`）。
+> **说明**：`baseline/` 是初始复现目录（仅 BERT），`newline/` 是开发目录（BERT + RoBERTa，Phase 3 改进迭代）。两者使用**相同**的 conda 环境（PyTorch 1.13 + transformers 4.24）。原计划将 `newline/` 升级到 PyTorch 2.x，但在 Phase 2 验证后发现 PyTorch 大版本升级（1.13 → 2.x）会破坏 Task 2 的 GlobalPointer 自定义 loss（详见 `experiments/phase2-问题修复记录.md`），因此保持旧版本依赖不变。
 
 ## 五、分阶段执行计划
 

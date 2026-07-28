@@ -2,11 +2,12 @@ import torch
 import codecs
 import json
 from transformers import BertTokenizer
+from aeda import aeda_augment
 
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_file, label_file, tokenizer, for_test=False):
+    def __init__(self, json_file, label_file, tokenizer, for_test=False, augment_train=False):
         aeda_chars = [".", ";", "?", ":", "!", ",", "，", "。"]
         self.for_test = for_test
         self.tokenizer = tokenizer
@@ -27,6 +28,35 @@ class Dataset(torch.utils.data.Dataset):
         self.frame2idx = {}
         for i, line in enumerate(self.ori_labels):
             self.frame2idx[line["frame_name"]] = i
+
+        # Phase 3.3: AEDA augmentation — all_data 层面增强后重新展开
+        if augment_train:
+            augmented_all_data = []
+            for line in self.all_data:
+                text = line['text']
+                target = line['target'][-1]
+                spans = [[s['start'], s['end']]
+                         for s in line['cfn_spans']]
+                new_text, new_target, new_spans = aeda_augment(
+                    text, target['start'], target['end'], spans)
+                new_cfn_spans = []
+                for i, s in enumerate(line['cfn_spans']):
+                    new_cfn_spans.append({
+                        'start': new_spans[i][0],
+                        'end': new_spans[i][1],
+                        'fe_abbr': s['fe_abbr'],
+                        'fe_name': s['fe_name']
+                    })
+                augmented_all_data.append({
+                    'text': new_text,
+                    'target': [{'start': new_target[0],
+                                'end': new_target[1],
+                                'pos': target['pos']}],
+                    'frame': line['frame'],
+                    'cfn_spans': new_cfn_spans,
+                    'sentence_id': line['sentence_id'] + 100000
+                })
+            self.all_data.extend(augmented_all_data)
 
         self.data = []
         for line in self.all_data:

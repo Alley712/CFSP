@@ -2,12 +2,11 @@ import torch
 import codecs
 import json
 from transformers import BertTokenizer
-from aeda import aeda_augment
 
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_file, label_file, tokenizer, for_test=False, augment_train=False):
+    def __init__(self, json_file, label_file, tokenizer, for_test=False):
         aeda_chars = [".", ";", "?", ":", "!", ",", "，", "。"]
         self.for_test = for_test
         self.tokenizer = tokenizer
@@ -28,35 +27,6 @@ class Dataset(torch.utils.data.Dataset):
             if self.num_labels < len(line["fes"]):
                 self.num_labels = len(line["fes"])
         self.max_cls = len(self.label2idx)
-
-        # Phase 3.3: AEDA augmentation — 训练集翻倍
-        if augment_train:
-            augmented = []
-            for item in self.all_data:
-                text = item['text']
-                target = item['target'][-1]
-                spans = [[s['start'], s['end']]
-                         for s in item['cfn_spans']]
-                new_text, new_target, new_spans = aeda_augment(
-                    text, target['start'], target['end'], spans)
-                new_cfn_spans = []
-                for i, s in enumerate(item['cfn_spans']):
-                    new_cfn_spans.append({
-                        'start': new_spans[i][0],
-                        'end': new_spans[i][1],
-                        'fe_abbr': s['fe_abbr'],
-                        'fe_name': s['fe_name']
-                    })
-                augmented.append({
-                    'text': new_text,
-                    'target': [{'start': new_target[0],
-                                'end': new_target[1],
-                                'pos': target['pos']}],
-                    'frame': item['frame'],
-                    'cfn_spans': new_cfn_spans,
-                    'sentence_id': item['sentence_id'] + 100000
-                })
-            self.all_data.extend(augmented)
 
         pass
 

@@ -2,12 +2,11 @@ import torch
 import codecs
 import json
 from transformers import BertTokenizer
-from aeda import aeda_augment
 
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_file, label_file, tokenizer, for_test=False, augment_train=False):
+    def __init__(self, json_file, label_file, tokenizer, for_test=False):
         aeda_chars = [".", ";", "?", ":", "!", ",", "，", "。"]
         self.for_test = for_test
         self.tokenizer = tokenizer
@@ -22,25 +21,6 @@ class Dataset(torch.utils.data.Dataset):
             self.label2idx[line["frame_name"]] = i
 
         self.num_labels = len(self.idx2label)
-
-        # Phase 3.3: AEDA augmentation — 训练集翻倍
-        if augment_train:
-            augmented = []
-            for item in self.all_data:
-                text = item['text']
-                target = item['target'][-1]
-                new_text, new_target, _ = aeda_augment(
-                    text, target['start'], target['end'], [])
-                augmented.append({
-                    'text': new_text,
-                    'target': [{'start': new_target[0],
-                                'end': new_target[1],
-                                'pos': target['pos']}],
-                    'frame': item['frame'],
-                    'sentence_id': item['sentence_id'] + 100000
-                })
-            self.all_data.extend(augmented)
-
         pass
 
     def __len__(self):

@@ -233,7 +233,7 @@ if __name__ == '__main__':
 
     train_dataset = Dataset("./dataset/cfn-train.json",
                             "./dataset/frame_info.json",
-                            tokenizer, augment_train=False)
+                            tokenizer)
     dev_dataset = Dataset("./dataset/cfn-dev.json",
                           "./dataset/frame_info.json",
                           tokenizer)

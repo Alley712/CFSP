@@ -148,7 +148,7 @@ def test(model, val_loader):
 
             pass
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
-    with open('dataset/A_task3_test.json', 'w', encoding='utf8', newline='\n') as f:
+    with open('dataset/B_task3_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)
 
 
@@ -159,10 +159,10 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer(vocab_file=args.vocab_file,
                               do_lower_case=True)
 
-    test_dataset = Dataset("./dataset/cfn-test-A.json",
+    test_dataset = Dataset("./dataset/cfn-test-B.json",
                             "./dataset/frame_info.json",
-                            "./dataset/A_task1_test.json",   # Phase 3.2: Task 1 output
-                            "./dataset/A_task2_test.json",
+                            "./dataset/B_task1_test.json",   # Phase 3.2: Task 1 output
+                            "./dataset/B_task2_test.json",
                             tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)

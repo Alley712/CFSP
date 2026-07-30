@@ -16,6 +16,8 @@ def construct_hyper_param():
     parser.add_argument("--accumulate_gradients", default=1, type=int,
                         help="The number of accumulation of backpropagation to effectivly increase the batch size.")
     parser.add_argument('--lr', default=2e-5, type=float, help='model learning rate.')
+    parser.add_argument('--seed', default=42, type=int,
+                        help='Random seed for reproducibility')
 
     # bert settings
     parser.add_argument("--config_file",

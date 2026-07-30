@@ -1,6 +1,8 @@
 #!/usr/bin/python3
 
 import os
+import random
+import math
 from functools import partial
 import numpy as np
 import torch
@@ -12,6 +14,16 @@ from transformers import BertConfig, BertTokenizer, BertForTokenClassification
 from dataset_task3 import Dataset
 from params import args
 from model_task3 import Model
+
+
+def set_seed(seed):
+    """固定所有随机源，确保训练可复现。"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 class FGM():
@@ -36,10 +48,11 @@ class FGM():
         self.backup = {}
 
 
-def warmup_linear(x, warmup=0.002):
+def warmup_cosine(x, warmup=0.1):
+    """Cosine annealing with linear warmup."""
     if x < warmup:
         return x / warmup
-    return max((x - 1.) / (warmup - 1.), 0)
+    return 0.5 * (1 + math.cos(math.pi * (x - warmup) / (1 - warmup)))
 
 
 def get_model_input(data, device=None):
@@ -151,18 +164,16 @@ def train(model, train_loader, val_loader):
 
             loss.backward()
 
-            # fgm.attack()  # embedding被修改了
-            # # optimizer.zero_grad() # 如果不想累加梯度，就把这里的注释取消
-            # loss_sum = \
-            # model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)[
-            #     'loss']
-            # loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
-            # fgm.restore()  # 恢复Embedding的参数
+            fgm.attack()  # embedding被修改了
+            # optimizer.zero_grad()  # 如果不想累加梯度，就把这里的注释取消
+            loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device, frame_ids=frame_ids)['loss']
+            loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
+            fgm.restore()  # 恢复Embedding的参数
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
-                               warmup_linear(global_step / total_steps,
+                               warmup_cosine(global_step / total_steps,
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
@@ -201,16 +212,19 @@ def load_pretrained_bert(bert_model, init_checkpoint):
 if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(args.seed)
 
     tokenizer = BertTokenizer(vocab_file=args.vocab_file,
                               do_lower_case=True)
 
     train_dataset = Dataset("./dataset/cfn-train.json",
                             "./dataset/frame_info.json",
-                            tokenizer)
+                            tokenizer,
+                            add_negatives=False)
     dev_dataset = Dataset("./dataset/cfn-dev.json",
                           "./dataset/frame_info.json",
-                          tokenizer)
+                          tokenizer,
+                          add_negatives=False)
 
     config = BertConfig.from_json_file(args.config_file)
     # BertConfig.from_pretrained('hfl/chinese-bert-wwm-ext')
@@ -223,13 +237,17 @@ if __name__ == '__main__':
     # model.load_state_dict(torch.load('', map_location='cpu'))
     model = model.to(device)
 
+    g = torch.Generator()
+    g.manual_seed(args.seed)
+
     train_loader = DataLoader(
         batch_size=args.batch_size,
         dataset=train_dataset,
         shuffle=True,
         num_workers=0,
         collate_fn=partial(get_model_input, device=device),
-        drop_last=True
+        drop_last=True,
+        generator=g,
     )
 
     val_loader = DataLoader(

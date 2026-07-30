@@ -70,6 +70,7 @@ class Dataset(torch.utils.data.Dataset):
                 "ori_target": [line[1], line[2]],
                 "frame_id": frame_id  # Phase 3.2
             })
+        self.idx2label.append("None")  # Phase 4: "no role" class
         self.num_labels = len(self.idx2label)
         pass
 
@@ -134,6 +135,9 @@ def get_model_input(data, device=None):
 def test(model, val_loader):
     model.eval()
     idx2label = val_loader.dataset.idx2label
+    none_id = len(idx2label) - 1  # Phase 4: index of "None" class
+    total = 0
+    skipped = 0  # Phase 4: count "None" predictions
     predicts = []
     with torch.no_grad():
         for step, batch in tqdm(enumerate(val_loader), total=len(val_loader), desc='eval'):
@@ -144,9 +148,15 @@ def test(model, val_loader):
             logits = output["logits"]
             pred = torch.argmax(F.softmax(logits, dim=-1), dim=-1)
             for i in range(len(pred)):
+                total += 1
+                if pred[i].item() == none_id:  # Phase 4: skip "None"
+                    skipped += 1
+                    continue
                 predicts.append([sentence_id[i], ori_target[i][0], ori_target[i][1], idx2label[pred[i]]])
 
             pass
+    if skipped > 0:
+        print(f"  Filtered {skipped}/{total} spans as None ({100*skipped/total:.1f}%)")
     data_json = json.dumps(predicts, indent=1, ensure_ascii=False)
     with open('dataset/B_task3_test.json', 'w', encoding='utf8', newline='\n') as f:
         f.write(data_json)

@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import os
+import random
 from functools import partial
 import numpy as np
 import torch
@@ -12,6 +13,16 @@ from transformers import BertConfig, BertTokenizer, BertForTokenClassification
 from dataset_task3 import Dataset
 from params import args
 from model_task3 import Model
+
+
+def set_seed(seed):
+    """固定所有随机源，确保训练可复现。"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 
 class FGM():
@@ -198,6 +209,7 @@ def load_pretrained_bert(bert_model, init_checkpoint):
 if __name__ == '__main__':
     # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    set_seed(args.seed)
 
     tokenizer = BertTokenizer(vocab_file=args.vocab_file,
                               do_lower_case=True)
@@ -219,13 +231,17 @@ if __name__ == '__main__':
     # model.load_state_dict(torch.load('', map_location='cpu'))
     model = model.to(device)
 
+    g = torch.Generator()
+    g.manual_seed(args.seed)
+
     train_loader = DataLoader(
         batch_size=args.batch_size,
         dataset=train_dataset,
         shuffle=True,
         num_workers=0,
         collate_fn=partial(get_model_input, device=device),
-        drop_last=True
+        drop_last=True,
+        generator=g,
     )
 
     val_loader = DataLoader(

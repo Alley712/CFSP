@@ -1,14 +1,12 @@
 import torch
 import codecs
 import json
-import random
 from transformers import BertTokenizer
 
 
 class Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, json_file, label_file, tokenizer, for_test=False,
-                 add_negatives=False, neg_per_sentence=1):
+    def __init__(self, json_file, label_file, tokenizer, for_test=False):
         aeda_chars = [".", ";", "?", ":", "!", ",", "，", "。"]
         self.for_test = for_test
         self.tokenizer = tokenizer
@@ -51,64 +49,8 @@ class Dataset(torch.utils.data.Dataset):
                     "fe_text": fe_text,
                     "frame_id": frame_id  # Phase 3.2
                 })
-
-        # Phase 4: Negative sampling — add random non-gold spans as "None" class
-        NONE_LABEL = len(self.idx2label)  # index of "None" = current num_labels
-        neg_count = 0
-        if add_negatives:
-            for line in self.all_data:
-                text = line["text"]
-                tgt = line["target"][-1]
-                tgt_start, tgt_end = tgt["start"], tgt["end"]
-                cfn_spans = line["cfn_spans"]
-                frame_id = self.frame2idx[line["frame"]]
-
-                # Build occupied positions (gold spans + target word)
-                occupied = set()
-                for span in cfn_spans:
-                    for pos in range(span["start"], span["end"] + 1):
-                        occupied.add(pos)
-                for pos in range(tgt_start, tgt_end + 1):
-                    occupied.add(pos)
-
-                available = [i for i in range(len(text)) if i not in occupied]
-                if len(available) < 3:
-                    continue
-
-                for _ in range(neg_per_sentence * 3):
-                    neg_start = random.choice(available)
-                    candidates = [p for p in available
-                                  if p > neg_start and p - neg_start <= 8]
-                    if not candidates:
-                        continue
-                    neg_end = random.choice(candidates)
-
-                    # Same coordinate offset logic as positive spans
-                    if neg_end + 1 < tgt_start:
-                        label_idx = [neg_start + 1, neg_end + 1]
-                    elif neg_start + 1 > tgt_end:
-                        label_idx = [neg_start + 3, neg_end + 3]
-                    else:
-                        continue  # overlaps with target, try again
-
-                    self.data.append({
-                        'text': text,
-                        "label_class": NONE_LABEL,
-                        "label_idx": label_idx,
-                        "sentence_id": line["sentence_id"],
-                        "target": [tgt_start + 1, tgt_end + 1],
-                        "fe_text": "",
-                        "frame_id": frame_id
-                    })
-                    neg_count += 1
-                    break
-
-        self.idx2label.append("None")
         self.num_labels = len(self.idx2label)
-        if add_negatives:
-            print(f"  Negatives added: {neg_count}, "
-                  f"pos:neg = {len(self.data) - neg_count}:{neg_count}, "
-                  f"num_labels = {self.num_labels}")
+        pass
 
     def __len__(self):
         return len(self.data)

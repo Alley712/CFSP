@@ -219,12 +219,10 @@ if __name__ == '__main__':
 
     train_dataset = Dataset("./dataset/cfn-train.json",
                             "./dataset/frame_info.json",
-                            tokenizer,
-                            add_negatives=False)
+                            tokenizer)
     dev_dataset = Dataset("./dataset/cfn-dev.json",
                           "./dataset/frame_info.json",
-                          tokenizer,
-                          add_negatives=False)
+                          tokenizer)
 
     config = BertConfig.from_json_file(args.config_file)
     # BertConfig.from_pretrained('hfl/chinese-bert-wwm-ext')

@@ -2,7 +2,6 @@
 
 import os
 import random
-import math
 from functools import partial
 import numpy as np
 import torch
@@ -48,11 +47,10 @@ class FGM():
         self.backup = {}
 
 
-def warmup_cosine(x, warmup=0.1):
-    """Cosine annealing with linear warmup."""
+def warmup_linear(x, warmup=0.002):
     if x < warmup:
         return x / warmup
-    return 0.5 * (1 + math.cos(math.pi * (x - warmup) / (1 - warmup)))
+    return max((x - 1.) / (warmup - 1.), 0)
 
 
 def get_model_input(data, device=None):
@@ -161,16 +159,16 @@ def train(model, train_loader, val_loader):
 
             loss.backward()
 
-            fgm.attack()  # embedding被修改了
-            # optimizer.zero_grad()  # 如果不想累加梯度，就把这里的注释取消
-            loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)['loss']
-            loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
-            fgm.restore()  # 恢复Embedding的参数
+            # fgm.attack()  # embedding被修改了
+            # # optimizer.zero_grad()  # 如果不想累加梯度，就把这里的注释取消
+            # loss_sum = model(input_ids=input_ids, attention_mask=attention_mask, target=target, labels=labels, device=device)['loss']
+            # loss_sum.backward()  # 反向传播，在正常的grad基础上，累加对抗训练的梯度
+            # fgm.restore()  # 恢复Embedding的参数
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
-                               warmup_cosine(global_step / total_steps,
+                               warmup_linear(global_step / total_steps,
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
@@ -187,7 +185,7 @@ def train(model, train_loader, val_loader):
             best_acc = acc
             model_to_save = model.module if hasattr(model, 'module') else model
             os.makedirs('saves', exist_ok=True)
-            torch.save(model_to_save.state_dict(), f'saves/model_task1_best.bin')
+            torch.save(model_to_save.state_dict(), f'saves/model_task1_best_seed{args.seed}.bin')
         else:
             print(f'current acc: {acc}')
 

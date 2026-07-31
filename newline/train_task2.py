@@ -2,7 +2,6 @@
 
 import os
 import random
-import math
 from functools import partial
 import numpy as np
 import torch
@@ -47,11 +46,10 @@ class FGM():
         self.backup = {}
 
 
-def warmup_cosine(x, warmup=0.1):
-    """Cosine annealing with linear warmup."""
+def warmup_linear(x, warmup=0.002):
     if x < warmup:
         return x / warmup
-    return 0.5 * (1 + math.cos(math.pi * (x - warmup) / (1 - warmup)))
+    return max((x - 1.) / (warmup - 1.), 0)
 
 
 def get_model_input(data, device=None):
@@ -199,7 +197,7 @@ def train(model, train_loader, val_loader):
             torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
             if (step + 1) % args.accumulate_gradients == 0:
                 lr_this_step = args.lr * \
-                               warmup_cosine(global_step / total_steps,
+                               warmup_linear(global_step / total_steps,
                                              args.warmup_proportion)
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = lr_this_step
@@ -217,7 +215,7 @@ def train(model, train_loader, val_loader):
             best_f1 = f1
             model_to_save = model.module if hasattr(model, 'module') else model
             os.makedirs('saves', exist_ok=True)
-            torch.save(model_to_save.state_dict(), f'saves/model_task2_best.bin')
+            torch.save(model_to_save.state_dict(), f'saves/model_task2_best_seed{args.seed}.bin')
         else:
             print(f'current f1: {f1}')
             print(f" H_precision: {H_precision}, H_recall: {H_recall}")

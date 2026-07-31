@@ -59,6 +59,9 @@ class Dataset(torch.utils.data.Dataset):
                 label_idx = [line[1] + 1, line[2] + 1]
             elif line[1] + 1 > target[1]:
                 label_idx = [line[1] + 3, line[2] + 3]
+            else:
+                # Span overlaps with target — skip
+                continue
             # Phase 3.2: get frame_id from Task 1 prediction
             frame_name = self.sent2frame.get(sent_id, self.ori_labels[0]["frame_name"])
             frame_id = self.frame2idx[frame_name]

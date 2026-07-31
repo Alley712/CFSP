@@ -7,7 +7,7 @@ import os
 def construct_hyper_param():
     parser = argparse.ArgumentParser()
     # train settings
-    parser.add_argument('--num_train_epochs', default=15, type=int)
+    parser.add_argument('--num_train_epochs', default=10, type=int)
     parser.add_argument('--warmup_proportion', default=0.1, type=float)
     parser.add_argument("--batch_size", default=3, type=int,
                         help="Batch size")
@@ -17,7 +17,7 @@ def construct_hyper_param():
                         help="The number of accumulation of backpropagation to effectivly increase the batch size.")
     parser.add_argument('--lr', default=2e-5, type=float, help='model learning rate.')
     parser.add_argument('--seed', default=42, type=int,
-                        help='Random seed for reproducibility')
+                        help='Random seed for reproducibility and ensemble')
 
     # bert settings
     parser.add_argument("--config_file",
